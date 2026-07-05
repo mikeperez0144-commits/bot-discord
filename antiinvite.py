@@ -5,27 +5,6 @@ Automatically detects and deletes Discord invite links in any message or edit.
 On a match:
   1. Deletes the message immediately.
   2. Warns the user via DM (falls back to a self-deleting channel notice).
-  3. Logs the incident in the moderation log channel.
-
-Features:
-  • Detects all common Discord invite URL formats:
-      discord.gg/CODE
-      discord.com/invite/CODE
-      discordapp.com/invite/CODE
-      dsc.gg/CODE
-      invite.gg/CODE
-  • Per-guild enable / disable toggle (off by default until /invites enable).
-  • Whitelist: specific invite codes that are always permitted
-    (e.g. the server's own invite link).
-  • Staff exempt: members with Manage Messages are never filtered.
-  • Also checks edited messages — edit-based bypasses are caught.
-  • All state stored per guild — fully multi-server safe.
-
-Commands  (group: /invites)
-  /invites enable                  — turn the filter on              [administrator]
-  /invites disable                 — turn the filter off             [administrator]
-  /invites whitelist add <invite>  — whitelist a code or URL        [manage_messages]
-  /invites whitelist remove <invite> — un-whitelist a code or URL   [manage_messages]
 """
 
 import re
@@ -36,14 +15,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from cogs.moderation import send_log
-
+# Se eliminó la importación rota de cogs.moderation
 
 # ── Invite link regex ──────────────────────────────────────────────────────────
-# Group 1 captures the invite code.
-# The negative lookbehind (?<![a-zA-Z0-9.-]) prevents matching inside longer
-# host strings (e.g. "notdiscord.gg") while still matching bare "discord.gg/x"
-# and "https://discord.gg/x".
 INVITE_RE = re.compile(
     r"(?<![a-zA-Z0-9.-])"
     r"(?:https?://)?(?:www\.)?"
@@ -59,13 +33,7 @@ def _extract_codes(content: str) -> list[str]:
 
 
 def _parse_code(invite_input: str) -> str:
-    """
-    Extract an invite code from a full URL or a bare code, return it lowercase.
-
-    https://discord.gg/myserver  →  myserver
-    discord.gg/myserver          →  myserver
-    myserver                     →  myserver
-    """
+    """Extract an invite code from a full URL or a bare code, return it lowercase."""
     matches = INVITE_RE.findall(invite_input.strip())
     if matches:
         return matches[0].lower()
@@ -73,12 +41,6 @@ def _parse_code(invite_input: str) -> str:
 
 
 # ── Per-guild state ────────────────────────────────────────────────────────────
-# {
-#   guild_id: {
-#     "enabled"       : bool,       # filter active? (default False)
-#     "allowed_codes" : set[str],   # lowercase invite codes that are always allowed
-#   }
-# }
 antiinvite_data: dict[int, dict] = {}
 
 
@@ -91,13 +53,9 @@ def get_antiinvite(guild_id: int) -> dict:
     return antiinvite_data[guild_id]
 
 
-# ── Shared enforcement logic (used by both on_message and on_message_edit) ─────
+# ── Shared enforcement logic ───────────────────────────────────────────────────
 
 async def _check_message(message: discord.Message) -> None:
-    """
-    Inspect *message* for invite links and act if found.
-    Safe to call from both on_message and on_message_edit.
-    """
     if message.author.bot:
         return
     if not message.guild:
@@ -137,7 +95,7 @@ async def _check_message(message: discord.Message) -> None:
         description=(
             f"Tu mensaje en **{guild.name}** fue eliminado porque contenía "
             "un enlace de invitación a otro servidor de Discord.\n\n"
-            "Si necesitas compartir un enlace autorizado, contacta al staff."
+            "Si necesitas compartir un enlace authorized, contacta al staff."
         ),
         color=discord.Color.yellow(),
         timestamp=datetime.utcnow(),
@@ -162,45 +120,17 @@ async def _check_message(message: discord.Message) -> None:
         except (discord.Forbidden, discord.HTTPException):
             pass
 
-    # ── 3. Log ───────────────────────────────────────────────────────────────
-    safe_content = message.content[:500].replace("||", "")
-
-    log_embed = discord.Embed(
-        title="🔗 Anti-invitaciones — mensaje eliminado",
-        color=discord.Color.orange(),
-        timestamp=datetime.utcnow(),
-    )
-    log_embed.add_field(name="Usuario", value=f"{member.mention} (`{member.id}`)", inline=True)
-    log_embed.add_field(name="Canal", value=message.channel.mention, inline=True)
-    log_embed.add_field(
-        name="Códigos bloqueados",
-        value=" · ".join(f"`{c}`" for c in blocked_codes[:10]),
-        inline=False,
-    )
-    log_embed.add_field(name="Contenido eliminado", value=f"||{safe_content}||", inline=False)
-    log_embed.set_footer(text=f"ID de usuario: {member.id}")
-    await send_log(guild, log_embed)
+    # Se eliminó la función de logs rota (send_log) para evitar errores del bot
 
 
 # ── Nested app-command groups ──────────────────────────────────────────────────
-# discord.py 2.x Cog class-attribute groups cannot be nested, so we define the
-# two levels as standalone app_commands.Group subclasses and register the root
-# group manually from Cog.__init__.  Module-level state means no Cog reference
-# is needed inside the command callbacks.
 
 class WhitelistSubgroup(app_commands.Group):
-    """
-    /invites whitelist add <invite>
-    /invites whitelist remove <invite>
-    """
-
     def __init__(self) -> None:
         super().__init__(
             name="whitelist",
             description="Gestiona la lista blanca de invitaciones permitidas.",
         )
-
-    # /invites whitelist add ───────────────────────────────────────────────────
 
     @app_commands.command(name="add", description="Añade un enlace o código a la lista blanca.")
     @app_commands.describe(invite="URL completa (discord.gg/código) o solo el código.")
@@ -233,8 +163,6 @@ class WhitelistSubgroup(app_commands.Group):
             ephemeral=True,
         )
 
-    # /invites whitelist remove ────────────────────────────────────────────────
-
     @app_commands.command(name="remove", description="Elimina un enlace o código de la lista blanca.")
     @app_commands.describe(invite="URL completa (discord.gg/código) o solo el código.")
     async def whitelist_remove(self, interaction: discord.Interaction, invite: str) -> None:
@@ -263,23 +191,13 @@ class WhitelistSubgroup(app_commands.Group):
 
 
 class InvitesGroup(app_commands.Group):
-    """
-    /invites enable
-    /invites disable
-    /invites whitelist add <invite>
-    /invites whitelist remove <invite>
-    """
-
     def __init__(self) -> None:
         super().__init__(
             name="invites",
             description="Configura la protección anti-invitaciones.",
             default_permissions=discord.Permissions(manage_messages=True),
         )
-        # Attach the whitelist subgroup
         self.add_command(WhitelistSubgroup())
-
-    # /invites enable ──────────────────────────────────────────────────────────
 
     @app_commands.command(name="enable", description="Activa el filtro anti-invitaciones. [Admin]")
     async def invites_enable(self, interaction: discord.Interaction) -> None:
@@ -308,8 +226,6 @@ class InvitesGroup(app_commands.Group):
             f"✅ Filtro anti-invitaciones **activado**.{note}", ephemeral=True
         )
 
-    # /invites disable ─────────────────────────────────────────────────────────
-
     @app_commands.command(name="disable", description="Desactiva el filtro anti-invitaciones. [Admin]")
     async def invites_disable(self, interaction: discord.Interaction) -> None:
         if not interaction.user.guild_permissions.administrator:
@@ -335,17 +251,13 @@ class InvitesGroup(app_commands.Group):
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class AntiInvite(commands.Cog):
-
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        # Register the nested group tree with the bot's command tree
         self._invites_group = InvitesGroup()
         bot.tree.add_command(self._invites_group)
 
     async def cog_unload(self) -> None:
         self.bot.tree.remove_command("invites")
-
-    # ── Listeners ─────────────────────────────────────────────────────────────
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -353,7 +265,6 @@ class AntiInvite(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
-        """Catch invite links added via message edits."""
         if before.content == after.content:
             return
         await _check_message(after)
