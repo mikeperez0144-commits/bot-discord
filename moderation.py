@@ -3,46 +3,40 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import datetime
 import asyncio
+import io # Necesario para crear archivos de texto virtuales
 
-# Diccionario para guardar los warns (se borrará si el bot se reinicia)
-warns = {}
+# ... (Mantén tu ID_CATEGORIA_TICKETS y las clases anteriores igual)
 
-class Moderation(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
-        self.bot = bot
+class CloseTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-    # --- COMANDO WARN ---
-    @app_commands.command(name="warn", description="Avisa a un usuario. [Admin]")
-    @app_commands.checks.has_permissions(kick_members=True)
-    async def warn(self, interaction: discord.Interaction, member: discord.Member, razon: str = "No especificada"):
-        user_id = str(member.id)
-        if user_id not in warns:
-            warns[user_id] = 0
+    @discord.ui.button(label="Cerrar Ticket", style=discord.ButtonStyle.danger, custom_id="cerrar_ticket_btn", emoji="🔒")
+    async def cerrar_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = interaction.channel
+        guild = interaction.guild
         
-        warns[user_id] += 1
-        embed = discord.Embed(title="⚠️ Warn", description=f"{member.mention} ha recibido un aviso.", color=discord.Color.red())
-        embed.add_field(name="Razón", value=razon)
-        embed.add_field(name="Total Warns", value=str(warns[user_id]))
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message("🔒 Generando transcripción y cerrando ticket...", ephemeral=True)
 
-    # --- COMANDO KICK ---
-    @app_commands.command(name="kick", description="Expulsa a un usuario. [Admin]")
-    @app_commands.checks.has_permissions(kick_members=True)
-    async def kick(self, interaction: discord.Interaction, member: discord.Member, razon: str = "No especificada"):
-        await member.kick(reason=razon)
-        await interaction.response.send_message(f"✅ {member.name} ha sido expulsado. Razón: {razon}")
+        # 1. Crear transcripción
+        transcript = io.StringIO()
+        transcript.write(f"Transcripción del ticket: {channel.name}\n")
+        transcript.write(f"Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        transcript.write("="*30 + "\n\n")
 
-    # --- COMANDO BAN ---
-    @app_commands.command(name="ban", description="Banea a un usuario. [Admin]")
-    @app_commands.checks.has_permissions(ban_members=True)
-    async def ban(self, interaction: discord.Interaction, member: discord.Member, razon: str = "No especificada"):
-        await member.ban(reason=razon)
-        await interaction.response.send_message(f"🔨 {member.name} ha sido baneado. Razón: {razon}")
+        # Leer los últimos 1000 mensajes
+        async for message in channel.history(limit=1000, oldest_first=True):
+            transcript.write(f"{message.created_at.strftime('%H:%M:%S')} {message.author.name}: {message.content}\n")
+        
+        transcript.seek(0)
+        file = discord.File(transcript, filename=f"transcripcion-{channel.name}.txt")
 
-    # --- COMANDO VER WARNS ---
-    @app_commands.command(name="warns", description="Mira cuántos avisos tiene un usuario.")
-    async def ver_warns(self, interaction: discord.Interaction, member: discord.Member):
-        count = warns.get(str(member.id), 0)
-        await interaction.response.send_message(f"👤 {member.name} tiene {count} advertencia(s).")
+        # 2. Enviar al canal de logs
+        log_channel = discord.utils.get(guild.text_channels, name="logs") or discord.utils.get(guild.text_channels, name="moderacion")
+        if log_channel:
+            embed = discord.Embed(title="📜 Transcripción de Ticket", description=f"Ticket **{channel.name}** cerrado por {interaction.user.name}", color=discord.Color.purple())
+            await log_channel.send(embed=embed, file=file)
 
-# ... (Mantén aquí debajo todo el código de Tickets que ya tenías: CloseTicketView, TicketButton, setup_tickets, etc.)
+        # 3. Borrar el canal
+        await asyncio.sleep(2)
+        await channel.delete()
