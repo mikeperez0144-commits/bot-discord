@@ -5,6 +5,7 @@ Automatically detects and deletes Discord invite links in any message or edit.
 On a match:
   1. Deletes the message immediately.
   2. Warns the user via DM (falls back to a self-deleting channel notice).
+  3. Logs the incident in the moderation log channel.
 """
 
 import re
@@ -15,7 +16,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-# Se eliminó la importación rota de cogs.moderation
+# Importación corregida a la raíz principal
+from moderation import send_log
+
 
 # ── Invite link regex ──────────────────────────────────────────────────────────
 INVITE_RE = re.compile(
@@ -95,7 +98,7 @@ async def _check_message(message: discord.Message) -> None:
         description=(
             f"Tu mensaje en **{guild.name}** fue eliminado porque contenía "
             "un enlace de invitación a otro servidor de Discord.\n\n"
-            "Si necesitas compartir un enlace authorized, contacta al staff."
+            "Si necesitas compartir un enlace autorizado, contacta al staff."
         ),
         color=discord.Color.yellow(),
         timestamp=datetime.utcnow(),
@@ -120,7 +123,26 @@ async def _check_message(message: discord.Message) -> None:
         except (discord.Forbidden, discord.HTTPException):
             pass
 
-    # Se eliminó la función de logs rota (send_log) para evitar errores del bot
+    # ── 3. Log ───────────────────────────────────────────────────────────────
+    safe_content = message.content[:500].replace("||", "")
+
+    log_embed = discord.Embed(
+        title="🔗 Anti-invitaciones — mensaje eliminado",
+        color=discord.Color.orange(),
+        timestamp=datetime.utcnow(),
+    )
+    log_embed.add_field(name="Usuario", value=f"{member.mention} (`{member.id}`)", inline=True)
+    log_embed.add_field(name="Canal", value=message.channel.mention, inline=True)
+    log_embed.add_field(
+        name="Códigos bloqueados",
+        value=" · ".join(f"`{c}`" for c in blocked_codes[:10]),
+        inline=False,
+    )
+    log_embed.add_field(name="Contenido eliminado", value=f"||{safe_content}||", inline=False)
+    log_embed.set_footer(text=f"ID de usuario: {member.id}")
+    
+    # Envío de logs reactivado con éxito
+    await send_log(guild, log_embed)
 
 
 # ── Nested app-command groups ──────────────────────────────────────────────────
@@ -272,5 +294,3 @@ class AntiInvite(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(AntiInvite(bot))
-
-
