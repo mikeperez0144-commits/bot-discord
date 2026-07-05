@@ -5,7 +5,7 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-# Mini servidor web para engañar a Render gratis
+# Mini servidor web para mantener a Render activo de forma gratuita
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -30,11 +30,13 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Error sincronizando comandos: {e}")
 
+# Carga de extensiones corregida desde la raíz del proyecto
 async def load_extensions():
     await bot.load_extension("antiinvite")
+    await bot.load_extension("moderation")
 
 async def main():
-    # Arrancamos el servidor web en segundo plano
+    # Arrancamos el servidor web simulado
     threading.Thread(target=run_web_server, daemon=True).start()
     
     async with bot:
