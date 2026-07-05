@@ -1,42 +1,31 @@
-import discord
-from discord import app_commands
-from discord.ext import commands
-from datetime import datetime
-import asyncio
-import io # Necesario para crear archivos de texto virtuales
-
-# ... (Mantén tu ID_CATEGORIA_TICKETS y las clases anteriores igual)
-
-class CloseTicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Cerrar Ticket", style=discord.ButtonStyle.danger, custom_id="cerrar_ticket_btn", emoji="🔒")
+@discord.ui.button(label="Cerrar Ticket", style=discord.ButtonStyle.danger, custom_id="cerrar_ticket_btn", emoji="🔒")
     async def cerrar_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = interaction.channel
         guild = interaction.guild
         
-        await interaction.response.send_message("🔒 Generando transcripción y cerrando ticket...", ephemeral=True)
+        await interaction.response.send_message("🔒 Generando transcripción...", ephemeral=True)
 
-        # 1. Crear transcripción
-        transcript = io.StringIO()
-        transcript.write(f"Transcripción del ticket: {channel.name}\n")
-        transcript.write(f"Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        transcript.write("="*30 + "\n\n")
+        # 1. Crear contenido
+        transcript_content = f"Transcripción del ticket: {channel.name}\n"
+        transcript_content += f"Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        transcript_content += "="*30 + "\n\n"
 
-        # Leer los últimos 1000 mensajes
         async for message in channel.history(limit=1000, oldest_first=True):
-            transcript.write(f"{message.created_at.strftime('%H:%M:%S')} {message.author.name}: {message.content}\n")
+            transcript_content += f"{message.created_at.strftime('%H:%M:%S')} {message.author.name}: {message.content}\n"
         
-        transcript.seek(0)
-        file = discord.File(transcript, filename=f"transcripcion-{channel.name}.txt")
+        # 2. Crear archivo binario correctamente
+        file_data = io.BytesIO(transcript_content.encode('utf-8'))
+        file = discord.File(file_data, filename=f"ticket-{channel.name}.txt")
 
-        # 2. Enviar al canal de logs
+        # 3. Enviar a logs
         log_channel = discord.utils.get(guild.text_channels, name="logs") or discord.utils.get(guild.text_channels, name="moderacion")
+        
         if log_channel:
-            embed = discord.Embed(title="📜 Transcripción de Ticket", description=f"Ticket **{channel.name}** cerrado por {interaction.user.name}", color=discord.Color.purple())
-            await log_channel.send(embed=embed, file=file)
-
-        # 3. Borrar el canal
+            try:
+                await log_channel.send(f"📜 Transcripción del ticket **{channel.name}** cerrado por {interaction.user.name}", file=file)
+            except Exception as e:
+                print(f"Error enviando log: {e}")
+        
+        # 4. Borrar canal
         await asyncio.sleep(2)
         await channel.delete()
