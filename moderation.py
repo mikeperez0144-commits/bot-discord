@@ -5,7 +5,7 @@ from datetime import datetime
 import asyncio
 
 # ⚠️ PEGA AQUÍ EL ID DE LA CATEGORÍA DE DISCORD DONDE SE CREARÁN LOS CANALES
-ID_CATEGORIA_TICKETS = 123456789012345678  # <- Cambia este número por tu ID real
+ID_CATEGORIA_TICKETS = 1190088876086276198  # <- Cambia este número por tu ID real
 
 async def send_log(guild: discord.Guild, embed: discord.Embed):
     channel = discord.utils.get(guild.text_channels, name="logs") or discord.utils.get(guild.text_channels, name="moderacion")
