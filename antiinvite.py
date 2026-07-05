@@ -272,3 +272,5 @@ class AntiInvite(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(AntiInvite(bot))
+
+
