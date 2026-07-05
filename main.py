@@ -2,6 +2,19 @@ import asyncio
 import discord
 from discord.ext import commands
 import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+
+# Mini servidor web para engañar a Render gratis
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot Online")
+
+def run_web_server():
+    server = HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 10000))), SimpleHTTPRequestHandler)
+    server.serve_forever()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -18,13 +31,14 @@ async def on_ready():
         print(f"❌ Error sincronizando comandos: {e}")
 
 async def load_extensions():
-    # Esto carga tu archivo antiinvite.py automáticamente
     await bot.load_extension("antiinvite")
 
 async def main():
+    # Arrancamos el servidor web en segundo plano
+    threading.Thread(target=run_web_server, daemon=True).start()
+    
     async with bot:
         await load_extensions()
-        # Koyeb leerá el token de forma segura desde aquí
         await bot.start(os.environ.get("DISCORD_TOKEN"))
 
 if __name__ == "__main__":
